@@ -1,97 +1,96 @@
 const path = require('path');
-const fs = require('fs')
+const fs = require('fs');
 const express = require('express');
 const OS = require('os');
 const bodyParser = require('body-parser');
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
+const cors = require('cors');
+const serverless = require('serverless-http');
+
 const app = express();
-const cors = require('cors')
-const serverless = require('serverless-http')
 
-
+// Middleware setup
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, '/')));
-app.use(cors())
+app.use(cors());
 
-mongoose.connect(process.env.MONGO_URI, {
-    user: process.env.MONGO_USERNAME,
-    pass: process.env.MONGO_PASSWORD,
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-}, function(err) {
-    if (err) {
-        console.log("error!! " + err)
-    } else {
-      //  console.log("MongoDB Connection Successful")
-    }
-})
+// MongoDB URI — local Docker container
+const MONGO_URI = 'mongodb://testUser:testPass@127.0.0.1:27017/solarSystemDB?authSource=admin';
 
-var Schema = mongoose.Schema;
-
-var dataSchema = new Schema({
-    name: String,
-    id: Number,
-    description: String,
-    image: String,
-    velocity: String,
-    distance: String
+// Define Mongoose Schema and Model
+const Schema = mongoose.Schema;
+const dataSchema = new Schema({
+  name: String,
+  id: Number,
+  description: String,
+  image: String,
+  velocity: String,
+  distance: String
 });
-var planetModel = mongoose.model('planets', dataSchema);
+const planetModel = mongoose.model('planets', dataSchema);
 
-
-
-app.post('/planet',   function(req, res) {
-   // console.log("Received Planet ID " + req.body.id)
-    planetModel.findOne({
-        id: req.body.id
-    }, function(err, planetData) {
-        if (err) {
-            alert("Ooops, We only have 9 planets and a sun. Select a number from 0 - 9")
-            res.send("Error in Planet Data")
-        } else {
-            res.send(planetData);
-        }
-    })
+// Connect to MongoDB and seed data
+mongoose.connect(MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
 })
+.then(async () => {
+  console.log(`✅ Connected to MongoDB: ${MONGO_URI}`);
+})
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err);
+});
 
-app.get('/',   async (req, res) => {
-    res.sendFile(path.join(__dirname, '/', 'index.html'));
+// Routes
+app.post('/planet', (req, res) => {
+  planetModel.findOne({ id: req.body.id }, (err, planetData) => {
+    if (err) {
+      console.error('Error fetching planet data:', err);
+      return res.status(500).send('Error fetching planet data');
+    } else if (!planetData) {
+      return res.status(404).send('Planet not found');
+    } else {
+      return res.status(200).send(planetData);
+    }
+  });
+});
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.get('/api-docs', (req, res) => {
-    fs.readFile('oas.json', 'utf8', (err, data) => {
-      if (err) {
-        console.error('Error reading file:', err);
-        res.status(500).send('Error reading file');
-      } else {
-        res.json(JSON.parse(data));
-      }
-    });
+  fs.readFile('oas.json', 'utf8', (err, data) => {
+    if (err) {
+      console.error('Error reading file:', err);
+      return res.status(500).send('Error reading file');
+    } else {
+      return res.json(JSON.parse(data));
+    }
   });
-  
-app.get('/os',   function(req, res) {
-    res.setHeader('Content-Type', 'application/json');
-    res.send({
-        "os": OS.hostname(),
-        "env": process.env.NODE_ENV
-    });
-})
+});
 
-app.get('/live',   function(req, res) {
-    res.setHeader('Content-Type', 'application/json');
-    res.send({
-        "status": "live"
-    });
-})
+app.get('/os', (req, res) => {
+  res.json({
+    os: OS.hostname(),
+    env: process.env.NODE_ENV || 'development'
+  });
+});
 
-app.get('/ready',   function(req, res) {
-    res.setHeader('Content-Type', 'application/json');
-    res.send({
-        "status": "ready"
-    });
-})
+app.get('/live', (req, res) => {
+  res.json({ status: 'live' });
+});
 
-app.listen(3000, () => { console.log("Server successfully running on port - " +3000); })
+app.get('/ready', (req, res) => {
+  res.json({ status: 'ready' });
+});
+
+// Start server
+const PORT = 3000;
+const HOST = '0.0.0.0';
+app.listen(PORT, () => {
+  console.log(`🚀 Server successfully running on port ${PORT}`);
+});
+
 module.exports = app;
-
-//module.exports.handler = serverless(app)
+// module.exports.handler = serverless(app);
